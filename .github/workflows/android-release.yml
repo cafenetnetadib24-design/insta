@@ -54,26 +54,36 @@ jobs:
           PASS="${STORE_PASSWORD:-android}"
           KEYPASS="${KEY_PASSWORD:-android}"
 
-          if [ -n "$SIGNING_KEY" ]; then
-            echo "$SIGNING_KEY" | tr -d ' \n\r\t' | base64 --decode > release.keystore 2>/dev/null || \
-            echo "$SIGNING_KEY" | tr -d ' \n\r\t' | base64 -d > release.keystore 2>/dev/null || true
+          verify_keystore() {
+            local kfile="$1"
+            [ -s "$kfile" ] || return 1
+            keytool -list -keystore "$kfile" -storepass "$PASS" >/dev/null 2>&1 && return 0
+            keytool -list -keystore "$kfile" -storepass "$PASS" -storetype PKCS12 >/dev/null 2>&1 && return 0
+            keytool -list -keystore "$kfile" -storepass "$PASS" -storetype JKS >/dev/null 2>&1 && return 0
+            return 1
+          }
 
-            if [ -s release.keystore ] && keytool -list -keystore release.keystore -storepass "$PASS" >/dev/null 2>&1; then
+          if [ -n "$SIGNING_KEY" ]; then
+            CLEAN_KEY=$(echo "$SIGNING_KEY" | tr -d ' \n\r\t')
+            echo "$CLEAN_KEY" | base64 --decode > release.keystore 2>/dev/null || \
+            echo "$CLEAN_KEY" | base64 -d > release.keystore 2>/dev/null || true
+
+            if verify_keystore release.keystore; then
               echo "Custom SIGNING_KEY secret decoded and validated successfully."
             else
-              echo "SIGNING_KEY base64 decode failed or password mismatch. Trying raw secret..."
+              echo "SIGNING_KEY base64 decode or validation failed. Trying raw secret..."
               printf '%s' "$SIGNING_KEY" > release.keystore
-              if [ -s release.keystore ] && keytool -list -keystore release.keystore -storepass "$PASS" >/dev/null 2>&1; then
+              if verify_keystore release.keystore; then
                 echo "Custom SIGNING_KEY secret validated successfully as raw file."
               else
-                echo "SIGNING_KEY secret is invalid or password mismatch. Removing invalid file..."
+                echo "SIGNING_KEY secret is invalid or corrupted. Removing invalid file..."
                 rm -f release.keystore
               fi
             fi
           fi
 
           if [ ! -f "release.keystore" ] || [ ! -s "release.keystore" ]; then
-            echo "Generating release keystore with alias=$ALIAS..."
+            echo "Generating valid release keystore with alias=$ALIAS..."
             rm -f release.keystore
             keytool -genkeypair -v \
               -keystore release.keystore \

@@ -93,35 +93,16 @@ android {
         storePassword = validStorePass
         keyAlias = validAlias
         keyPassword = validKeyPass
+      } else if (keystoreFile.exists()) {
+        storeFile = keystoreFile
+        storePassword = envPass
+        keyAlias = envAlias
+        keyPassword = envKeyPass
       } else {
-        try {
-          keystoreFile.parentFile?.mkdirs()
-          val process = ProcessBuilder(
-            "keytool", "-genkeypair", "-v",
-            "-keystore", keystoreFile.absolutePath,
-            "-storetype", "PKCS12",
-            "-alias", envAlias,
-            "-keyalg", "RSA",
-            "-keysize", "2048",
-            "-validity", "10000",
-            "-storepass", envPass,
-            "-keypass", envKeyPass,
-            "-dname", "CN=App, OU=Dev, O=App, L=City, ST=State, C=US"
-          ).start()
-          process.waitFor()
-        } catch (_: Throwable) {}
-
-        if (keystoreFile.exists() && keystoreFile.length() > 0L) {
-          storeFile = keystoreFile
-          storePassword = envPass
-          keyAlias = envAlias
-          keyPassword = envKeyPass
-        } else {
-          storeFile = file("${rootDir}/debug.keystore")
-          storePassword = "android"
-          keyAlias = "androiddebugkey"
-          keyPassword = "android"
-        }
+        storeFile = file("${rootDir}/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
       }
     }
     create("debugConfig") {
