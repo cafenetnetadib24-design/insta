@@ -41,12 +41,14 @@ jobs:
             gradle wrapper --gradle-version 8.7
           fi
 
-      - name: Prepare Release Keystore
+      - name: Prepare Release Keystore and Environment
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           ALIAS="${KEY_ALIAS:-releaseKey}"
           PASS="${STORE_PASSWORD:-android}"
@@ -77,7 +79,20 @@ jobs:
             echo "Release keystore ready."
           fi
 
-          touch .env
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            echo "Custom google-services.json provided via secrets."
+          fi
+
+          if [ -f ".env.example" ]; then
+            cp -n .env.example .env || true
+          else
+            touch .env
+          fi
+
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
+          fi
 
       - name: Build Release APK and AAB
         env:
