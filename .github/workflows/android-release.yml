@@ -44,25 +44,40 @@ jobs:
       - name: Prepare Release Keystore
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          ALIAS="${KEY_ALIAS:-releaseKey}"
+          PASS="${STORE_PASSWORD:-android}"
+          KEYPASS="${KEY_PASSWORD:-android}"
+
           if [ -n "$SIGNING_KEY" ]; then
-            echo "$SIGNING_KEY" | base64 -d > release.keystore
-            echo "Custom SIGNING_KEY secret decoded successfully."
-          elif [ -f "release.keystore" ]; then
-            echo "Using existing release.keystore from repository."
-          else
-            echo "No keystore found. Generating a temporary release keystore..."
+            echo "$SIGNING_KEY" | tr -d ' \n\r' | base64 -d > release.keystore
+            if keytool -list -keystore release.keystore -storepass "$PASS" >/dev/null 2>&1; then
+              echo "Custom SIGNING_KEY secret decoded and validated successfully."
+            else
+              echo "SIGNING_KEY secret failed validation with provided password. Removing corrupted file..."
+              rm -f release.keystore
+            fi
+          fi
+
+          if [ ! -f "release.keystore" ] || [ ! -s "release.keystore" ]; then
+            echo "Generating release keystore with alias=$ALIAS..."
+            rm -f release.keystore
             keytool -genkeypair -v \
               -keystore release.keystore \
-              -alias releaseKey \
+              -alias "$ALIAS" \
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000 \
-              -storepass android \
-              -keypass android \
+              -storepass "$PASS" \
+              -keypass "$KEYPASS" \
               -dname "CN=InstagramDownloader, OU=Dev, O=App, L=City, ST=State, C=US"
-            echo "Temporary release keystore generated."
+            echo "Release keystore ready."
           fi
+
+          touch .env
 
       - name: Build Release APK and AAB
         env:
