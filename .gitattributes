@@ -1,0 +1,14 @@
+# Prevent git from corrupting binary files like gradle-wrapper.jar or altering line endings in gradlew
+* text=auto eol=lf
+
+# Binary files MUST be handled as raw binary
+*.jar binary
+*.keystore binary
+*.so binary
+*.png binary
+*.jpg binary
+*.webp binary
+
+# Shell scripts MUST use LF line endings
+gradlew text eol=lf
+*.sh text eol=lf
