@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.security.KeyStore
 
 plugins {
   alias(libs.plugins.android.application)
@@ -32,16 +33,49 @@ android {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/release.keystore"
       val keystoreFile = file(keystorePath)
-      if (keystoreFile.exists()) {
+      var isValidKeystore = false
+      val sPassword = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
+      val kAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: "releaseKey"
+      val kPassword = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
+
+      if (keystoreFile.exists() && keystoreFile.length() > 0) {
+        try {
+          val ksType = KeyStore.getDefaultType()
+          val ks = KeyStore.getInstance(ksType)
+          keystoreFile.inputStream().use { stream ->
+            ks.load(stream, sPassword.toCharArray())
+          }
+          if (ks.containsAlias(kAlias)) {
+            isValidKeystore = true
+          }
+        } catch (_: Throwable) {
+          try {
+            val ks = KeyStore.getInstance("PKCS12")
+            keystoreFile.inputStream().use { stream ->
+              ks.load(stream, sPassword.toCharArray())
+            }
+            if (ks.containsAlias(kAlias)) {
+              isValidKeystore = true
+            }
+          } catch (_: Throwable) {}
+        }
+      }
+
+      if (isValidKeystore) {
         storeFile = keystoreFile
-        storePassword = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
-        keyAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: "releaseKey"
-        keyPassword = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
+        storePassword = sPassword
+        keyAlias = kAlias
+        keyPassword = kPassword
       } else {
-        storeFile = file("${rootDir}/debug.keystore")
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
+        val debugKeystore = file("${rootDir}/debug.keystore")
+        if (debugKeystore.exists()) {
+          storeFile = debugKeystore
+        } else {
+          storeFile = keystoreFile
+        }
+        storePassword = sPassword
+        keyAlias = kAlias
+        keyPassword = kPassword
       }
     }
     create("debugConfig") {
