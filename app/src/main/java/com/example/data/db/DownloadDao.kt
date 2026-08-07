@@ -17,6 +17,9 @@ interface DownloadDao {
     @Query("DELETE FROM download_history WHERE id = :id")
     suspend fun deleteDownloadById(id: Long)
 
+    @Query("UPDATE download_history SET title = :newTitle WHERE id = :id")
+    suspend fun updateTitle(id: Long, newTitle: String)
+
     @Query("DELETE FROM download_history")
     suspend fun clearAll()
 }

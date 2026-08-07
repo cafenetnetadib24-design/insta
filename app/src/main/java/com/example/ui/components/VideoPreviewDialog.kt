@@ -82,24 +82,24 @@ fun VideoPreviewDialog(
     ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
+                .fillMaxWidth(0.96f)
                 .wrapContentHeight()
-                .padding(vertical = 12.dp)
+                .padding(vertical = 8.dp)
                 .testTag("video_preview_dialog"),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+            border = null
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Header Row
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -122,13 +122,12 @@ fun VideoPreviewDialog(
                     }
                 }
 
-                // Instagram Post Ratio Video Frame (Aspect Ratio 4:5 with Height Limit)
+                // Expanded Video Frame with Cropping to remove black space
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(0.8f) // Standard 4:5 Instagram Post Ratio
-                        .heightIn(max = 380.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .heightIn(min = 320.dp, max = 480.dp)
+                        .clip(RoundedCornerShape(18.dp))
                         .background(Color.Black)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -145,6 +144,11 @@ fun VideoPreviewDialog(
                                 setOnPreparedListener { mp ->
                                     mediaPlayer = mp
                                     mp.isLooping = true
+                                    try {
+                                        mp.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
+                                    } catch (e: Exception) {
+                                        // Ignore
+                                    }
                                     mp.start()
                                     isPlaying = true
                                     durationMs = mp.duration.toLong()

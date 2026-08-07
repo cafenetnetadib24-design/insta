@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,7 +30,9 @@ import com.example.ui.theme.*
 @Composable
 fun VideoInfoCard(
     videoInfo: VideoInfo,
-    onStartDownload: () -> Unit,
+    customTitle: String,
+    onTitleChanged: (String) -> Unit,
+    onStartDownload: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -39,21 +42,21 @@ fun VideoInfoCard(
             .testTag("video_info_card"),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+        border = null
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Thumbnail Container
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(SleekBackground)
+                    .height(250.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.Transparent)
             ) {
                 if (videoInfo.thumbnailUrl.isNotBlank()) {
                     AsyncImage(
@@ -169,19 +172,39 @@ fun VideoInfoCard(
                 }
             }
 
-            // Video Title
-            Text(
-                text = videoInfo.title,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Editable Video Title Section
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "نام فایل ویدیو (قابل تغییر):",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                OutlinedTextField(
+                    value = customTitle,
+                    onValueChange = onTitleChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    ),
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedBorderColor = Color(0xFFFF9800),
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = Color.Black,
+                        unfocusedTextColor = Color.Black
+                    )
+                )
+            }
 
             // Sleek Dark Action Button
             Button(
-                onClick = onStartDownload,
+                onClick = { onStartDownload(customTitle) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp)

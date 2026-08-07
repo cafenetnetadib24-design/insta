@@ -118,7 +118,7 @@ fun AdvancedProgressBar(
                                 DownloadState.COMPLETED -> StatusSuccess
                                 DownloadState.FAILED -> StatusError
                                 DownloadState.PAUSED -> StatusWarning
-                                else -> SleekPrimary
+                                else -> Color.Black
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -129,11 +129,11 @@ fun AdvancedProgressBar(
                 if (progress.state == DownloadState.DOWNLOADING) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = SleekBackground
+                        color = Color(0xFFE2E8F0)
                     ) {
                         Text(
                             text = progress.speedFormatted,
-                            color = MaterialTheme.colorScheme.onBackground,
+                            color = Color.Black,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -372,7 +372,7 @@ fun AdvancedProgressBar(
                         Icon(Icons.Default.PermMedia, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "مشاهده و پخش ویدیو در گالری",
+                            text = "باز کردن",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -419,12 +419,13 @@ private fun MetricCard(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = label,
-                color = TextSecondary,
-                fontSize = 10.sp
+                color = Color.Black,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
                 text = value,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = Color.Black,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1

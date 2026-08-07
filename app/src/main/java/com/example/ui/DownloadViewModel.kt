@@ -5,26 +5,35 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.AdItem
 import com.example.data.db.AppDatabase
 import com.example.data.db.DownloadEntity
 import com.example.downloader.*
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class DownloadUiState(
-    val inputUrl: String = "https://www.instagram.com/reel/Dbk_8dIN-na/?igsh=MTRpOXN4M3MzNWYxbw==",
+    val inputUrl: String = "",
     val isExtracting: Boolean = false,
     val extractionError: String? = null,
     val extractedVideoInfo: VideoInfo? = null,
+    val customTitle: String = "",
     val downloadProgress: DownloadProgress = DownloadProgress(),
     val selectedTab: Int = 0, // 0 = Downloader, 1 = History
-    val activePreviewUri: String? = null
+    val activePreviewUri: String? = null,
+    val isDarkTheme: Boolean = false,
+    val galleryLayoutMode: Int = 1, // 0 = List, 1 = Grid (2 cols)
+    val gallerySearchQuery: String = "",
+    val activeAd: AdItem? = null,
+    val bannerAd: AdItem? = null
 )
 
 class DownloadViewModel(application: Application) : AndroidViewModel(application) {
@@ -33,6 +42,56 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
     private val downloadDao = db.downloadDao()
     private val extractor = InstagramExtractor()
     private val downloadManagerHelper = DownloadManagerHelper(application)
+    private val adManager = AdManager(application)
+
+    init {
+        startAdTimer()
+    }
+
+    private fun startAdTimer() {
+        viewModelScope.launch {
+            // Initial fetch & pre-cache images
+            val ads = adManager.fetchAndCacheAds()
+            if (ads.isNotEmpty()) {
+                val banner = ads.random()
+                _uiState.update { it.copy(bannerAd = banner) }
+
+                // Show full-screen ad after short initial delay (1.5 seconds)
+                delay(1500)
+                val fullAd = ads.random()
+                _uiState.update { it.copy(activeAd = fullAd) }
+            }
+
+            // Recurring 90-second ad rotation schedule
+            while (isActive) {
+                delay(90 * 1000L)
+                val currentAds = adManager.fetchAndCacheAds()
+                if (currentAds.isNotEmpty()) {
+                    val randomAd = currentAds.random()
+                    val randomBanner = currentAds.random()
+                    _uiState.update { it.copy(activeAd = randomAd, bannerAd = randomBanner) }
+                }
+            }
+        }
+    }
+
+    fun triggerAdManually() {
+        val randomAd = adManager.getRandomAd()
+        if (randomAd != null) {
+            _uiState.update { it.copy(activeAd = randomAd) }
+        } else {
+            viewModelScope.launch {
+                val ads = adManager.fetchAndCacheAds()
+                if (ads.isNotEmpty()) {
+                    _uiState.update { it.copy(activeAd = ads.random(), bannerAd = ads.random()) }
+                }
+            }
+        }
+    }
+
+    fun dismissAd() {
+        _uiState.update { it.copy(activeAd = null) }
+    }
 
     private val _uiState = MutableStateFlow(DownloadUiState())
     val uiState: StateFlow<DownloadUiState> = _uiState.asStateFlow()
@@ -53,6 +112,22 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                 extractionError = null
             )
         }
+    }
+
+    fun onCustomTitleChanged(newTitle: String) {
+        _uiState.update { it.copy(customTitle = newTitle) }
+    }
+
+    fun toggleTheme() {
+        _uiState.update { it.copy(isDarkTheme = !it.isDarkTheme) }
+    }
+
+    fun setGalleryLayoutMode(mode: Int) {
+        _uiState.update { it.copy(galleryLayoutMode = mode) }
+    }
+
+    fun onGallerySearchQueryChanged(query: String) {
+        _uiState.update { it.copy(gallerySearchQuery = query) }
     }
 
     fun setTab(tabIndex: Int) {
@@ -111,6 +186,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                 isExtracting = true,
                 extractionError = null,
                 extractedVideoInfo = null,
+                customTitle = "",
                 downloadProgress = DownloadProgress()
             )
         }
@@ -123,6 +199,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                     it.copy(
                         isExtracting = false,
                         extractedVideoInfo = videoInfo,
+                        customTitle = videoInfo.title,
                         extractionError = null
                     )
                 }
@@ -142,8 +219,12 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun startDownload() {
-        val videoInfo = _uiState.value.extractedVideoInfo ?: return
+    fun startDownload(overrideTitle: String? = null) {
+        val rawVideoInfo = _uiState.value.extractedVideoInfo ?: return
+        val finalTitle = overrideTitle?.ifBlank { null }
+            ?: _uiState.value.customTitle.ifBlank { null }
+            ?: rawVideoInfo.title
+        val videoInfo = rawVideoInfo.copy(title = finalTitle)
         val targetUrl = videoInfo.videoUrl
 
         downloadJob?.cancel()
@@ -160,7 +241,13 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                             filePath = progress.savedFilePath ?: "",
                             fileSize = progress.totalBytes
                         )
-                        _uiState.update { it.copy(activePreviewUri = progress.savedContentUri) }
+                        val completionAd = adManager.getRandomAd()
+                        _uiState.update { 
+                            it.copy(
+                                activePreviewUri = progress.savedContentUri,
+                                activeAd = completionAd ?: it.activeAd
+                            ) 
+                        }
                     }
                 }
         }
@@ -191,6 +278,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                 isExtracting = false,
                 extractionError = null,
                 extractedVideoInfo = null,
+                customTitle = "",
                 downloadProgress = DownloadProgress(),
                 activePreviewUri = null
             )
@@ -215,6 +303,13 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                 downloadStatus = "COMPLETED"
             )
             downloadDao.insertDownload(entity)
+        }
+    }
+
+    fun renameHistoryItem(id: Long, newTitle: String) {
+        if (newTitle.isBlank()) return
+        viewModelScope.launch {
+            downloadDao.updateTitle(id, newTitle)
         }
     }
 
