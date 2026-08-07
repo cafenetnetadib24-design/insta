@@ -43,21 +43,24 @@ android {
       var validAlias = envAlias
       var validKeyPass = envKeyPass
 
-      fun checkKeystore(f: File, pass: String, alias: String): Boolean {
+      fun checkKeystore(f: File, storePass: String, alias: String, keyPass: String): Boolean {
         if (!f.exists() || f.length() == 0L) return false
         for (type in arrayOf(KeyStore.getDefaultType(), "PKCS12", "JKS")) {
           try {
             val ks = KeyStore.getInstance(type)
-            f.inputStream().use { ks.load(it, pass.toCharArray()) }
+            f.inputStream().use { ks.load(it, storePass.toCharArray()) }
             if (ks.containsAlias(alias)) {
-              return true
+              val cert = ks.getCertificate(alias)
+              if (cert != null) {
+                return true
+              }
             }
           } catch (_: Throwable) {}
         }
         return false
       }
 
-      if (checkKeystore(keystoreFile, envPass, envAlias)) {
+      if (checkKeystore(keystoreFile, envPass, envAlias, envKeyPass)) {
         validFile = keystoreFile
       } else {
         var foundAlias: String? = null
@@ -67,10 +70,16 @@ android {
               val ks = KeyStore.getInstance(type)
               keystoreFile.inputStream().use { ks.load(it, envPass.toCharArray()) }
               val aliases = ks.aliases()
-              if (aliases.hasMoreElements()) {
-                foundAlias = aliases.nextElement()
-                break
+              while (aliases.hasMoreElements()) {
+                val a = aliases.nextElement()
+                try {
+                  if (ks.getCertificate(a) != null) {
+                    foundAlias = a
+                    break
+                  }
+                } catch (_: Throwable) {}
               }
+              if (foundAlias != null) break
             } catch (_: Throwable) {}
           }
         }
@@ -79,7 +88,7 @@ android {
           validAlias = foundAlias
         } else {
           val debugKs = file("${rootDir}/debug.keystore")
-          if (checkKeystore(debugKs, "android", "androiddebugkey")) {
+          if (checkKeystore(debugKs, "android", "androiddebugkey", "android")) {
             validFile = debugKs
             validStorePass = "android"
             validAlias = "androiddebugkey"

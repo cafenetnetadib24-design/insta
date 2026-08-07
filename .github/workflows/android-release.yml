@@ -57,9 +57,10 @@ jobs:
           verify_keystore() {
             local kfile="$1"
             [ -s "$kfile" ] || return 1
-            keytool -list -keystore "$kfile" -storepass "$PASS" >/dev/null 2>&1 && return 0
-            keytool -list -keystore "$kfile" -storepass "$PASS" -storetype PKCS12 >/dev/null 2>&1 && return 0
-            keytool -list -keystore "$kfile" -storepass "$PASS" -storetype JKS >/dev/null 2>&1 && return 0
+            keytool -exportcert -keystore "$kfile" -storepass "$PASS" -alias "$ALIAS" -keypass "$KEYPASS" >/dev/null 2>&1 && return 0
+            keytool -exportcert -keystore "$kfile" -storepass "$PASS" -alias "$ALIAS" >/dev/null 2>&1 && return 0
+            keytool -exportcert -keystore "$kfile" -storepass "$PASS" -storetype PKCS12 -alias "$ALIAS" >/dev/null 2>&1 && return 0
+            keytool -exportcert -keystore "$kfile" -storepass "$PASS" -storetype JKS -alias "$ALIAS" >/dev/null 2>&1 && return 0
             return 1
           }
 
