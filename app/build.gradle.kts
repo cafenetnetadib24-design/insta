@@ -43,52 +43,64 @@ android {
       var validAlias = envAlias
       var validKeyPass = envKeyPass
 
-      fun checkKeystore(f: File, storePass: String, alias: String, keyPass: String): Boolean {
-        if (!f.exists() || f.length() == 0L) return false
-        for (type in arrayOf(KeyStore.getDefaultType(), "PKCS12", "JKS")) {
+      fun checkKeystore(f: File, storePass: String, alias: String, keyPass: String): Triple<Boolean, String, String>? {
+        if (!f.exists() || f.length() == 0L) return null
+        for (type in arrayOf("PKCS12", "JKS", KeyStore.getDefaultType())) {
           try {
             val ks = KeyStore.getInstance(type)
             f.inputStream().use { ks.load(it, storePass.toCharArray()) }
             if (ks.containsAlias(alias)) {
-              val cert = ks.getCertificate(alias)
-              if (cert != null) {
-                return true
+              if (ks.getCertificate(alias) != null) {
+                var effectiveKeyPass = keyPass
+                try {
+                  if (ks.getKey(alias, keyPass.toCharArray()) != null) {
+                    return Triple(true, alias, effectiveKeyPass)
+                  }
+                } catch (_: Throwable) {}
+                try {
+                  if (ks.getKey(alias, storePass.toCharArray()) != null) {
+                    effectiveKeyPass = storePass
+                    return Triple(true, alias, effectiveKeyPass)
+                  }
+                } catch (_: Throwable) {}
               }
             }
           } catch (_: Throwable) {}
         }
-        return false
+        return null
       }
 
-      if (checkKeystore(keystoreFile, envPass, envAlias, envKeyPass)) {
+      val exactMatch = checkKeystore(keystoreFile, envPass, envAlias, envKeyPass)
+      if (exactMatch != null) {
         validFile = keystoreFile
+        validAlias = exactMatch.second
+        validKeyPass = exactMatch.third
       } else {
-        var foundAlias: String? = null
         if (keystoreFile.exists() && keystoreFile.length() > 0L) {
-          for (type in arrayOf(KeyStore.getDefaultType(), "PKCS12", "JKS")) {
+          for (type in arrayOf("PKCS12", "JKS", KeyStore.getDefaultType())) {
             try {
               val ks = KeyStore.getInstance(type)
               keystoreFile.inputStream().use { ks.load(it, envPass.toCharArray()) }
               val aliases = ks.aliases()
               while (aliases.hasMoreElements()) {
                 val a = aliases.nextElement()
-                try {
-                  if (ks.getCertificate(a) != null) {
-                    foundAlias = a
-                    break
-                  }
-                } catch (_: Throwable) {}
+                val match = checkKeystore(keystoreFile, envPass, a, envKeyPass)
+                if (match != null) {
+                  validFile = keystoreFile
+                  validAlias = match.second
+                  validKeyPass = match.third
+                  break
+                }
               }
-              if (foundAlias != null) break
+              if (validFile != null) break
             } catch (_: Throwable) {}
           }
         }
-        if (foundAlias != null) {
-          validFile = keystoreFile
-          validAlias = foundAlias
-        } else {
+
+        if (validFile == null) {
           val debugKs = file("${rootDir}/debug.keystore")
-          if (checkKeystore(debugKs, "android", "androiddebugkey", "android")) {
+          val debugMatch = checkKeystore(debugKs, "android", "androiddebugkey", "android")
+          if (debugMatch != null) {
             validFile = debugKs
             validStorePass = "android"
             validAlias = "androiddebugkey"
@@ -102,11 +114,6 @@ android {
         storePassword = validStorePass
         keyAlias = validAlias
         keyPassword = validKeyPass
-      } else if (keystoreFile.exists()) {
-        storeFile = keystoreFile
-        storePassword = envPass
-        keyAlias = envAlias
-        keyPassword = envKeyPass
       } else {
         storeFile = file("${rootDir}/debug.keystore")
         storePassword = "android"
