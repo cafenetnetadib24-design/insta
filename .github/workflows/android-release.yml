@@ -79,9 +79,45 @@ jobs:
             echo "Release keystore ready."
           fi
 
+          mkdir -p app
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
             echo "Custom google-services.json provided via secrets."
+          fi
+
+          if [ ! -f "app/google-services.json" ]; then
+            echo "Generating default app/google-services.json..."
+            cat << 'EOF' > app/google-services.json
+{
+  "project_info": {
+    "project_number": "123456789012",
+    "project_id": "sample-project",
+    "storage_bucket": "sample-project.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789012:android:1234567890123456",
+        "android_client_info": {
+          "package_name": "com.aistudio.videodownloader.mkvpzx"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDummyKeyForGoogleServicesBuild"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+EOF
           fi
 
           if [ -f ".env.example" ]; then
@@ -101,7 +137,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease bundleRelease \
+          ./gradlew clean assembleRelease bundleRelease \
             --no-daemon \
             -x lintVitalRelease \
             -Dorg.gradle.workers.max=2 \
