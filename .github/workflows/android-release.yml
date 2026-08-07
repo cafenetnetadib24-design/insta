@@ -87,37 +87,7 @@ jobs:
 
           if [ ! -f "app/google-services.json" ]; then
             echo "Generating default app/google-services.json..."
-            cat << 'EOF' > app/google-services.json
-{
-  "project_info": {
-    "project_number": "123456789012",
-    "project_id": "sample-project",
-    "storage_bucket": "sample-project.appspot.com"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:1234567890123456",
-        "android_client_info": {
-          "package_name": "com.aistudio.videodownloader.mkvpzx"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDummyKeyForGoogleServicesBuild"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    }
-  ],
-  "configuration_version": "1"
-}
-EOF
+            echo '{"project_info":{"project_number":"123456789012","project_id":"sample-project","storage_bucket":"sample-project.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789012:android:1234567890123456","android_client_info":{"package_name":"com.aistudio.videodownloader.mkvpzx"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKeyForGoogleServicesBuild"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
           fi
 
           if [ -f ".env.example" ]; then
