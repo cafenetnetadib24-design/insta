@@ -55,16 +55,18 @@ jobs:
           KEYPASS="${KEY_PASSWORD:-android}"
 
           if [ -n "$SIGNING_KEY" ]; then
-            echo "$SIGNING_KEY" | tr -d ' \n\r' | base64 -d > release.keystore 2>/dev/null || true
-            if [ -s release.keystore ] && keytool -list -keystore release.keystore -storepass "$PASS" -alias "$ALIAS" >/dev/null 2>&1; then
-              echo "Custom SIGNING_KEY secret decoded and validated successfully for alias '$ALIAS'."
+            echo "$SIGNING_KEY" | tr -d ' \n\r\t' | base64 --decode > release.keystore 2>/dev/null || \
+            echo "$SIGNING_KEY" | tr -d ' \n\r\t' | base64 -d > release.keystore 2>/dev/null || true
+
+            if [ -s release.keystore ] && keytool -list -keystore release.keystore -storepass "$PASS" >/dev/null 2>&1; then
+              echo "Custom SIGNING_KEY secret decoded and validated successfully."
             else
-              echo "SIGNING_KEY base64 decode or alias '$ALIAS' validation failed. Trying raw secret..."
+              echo "SIGNING_KEY base64 decode failed or password mismatch. Trying raw secret..."
               printf '%s' "$SIGNING_KEY" > release.keystore
-              if [ -s release.keystore ] && keytool -list -keystore release.keystore -storepass "$PASS" -alias "$ALIAS" >/dev/null 2>&1; then
-                echo "Custom SIGNING_KEY secret validated successfully as raw keystore file for alias '$ALIAS'."
+              if [ -s release.keystore ] && keytool -list -keystore release.keystore -storepass "$PASS" >/dev/null 2>&1; then
+                echo "Custom SIGNING_KEY secret validated successfully as raw file."
               else
-                echo "SIGNING_KEY secret is corrupted or alias '$ALIAS'/password mismatch. Removing invalid file..."
+                echo "SIGNING_KEY secret is invalid or password mismatch. Removing invalid file..."
                 rm -f release.keystore
               fi
             fi
@@ -75,6 +77,7 @@ jobs:
             rm -f release.keystore
             keytool -genkeypair -v \
               -keystore release.keystore \
+              -storetype PKCS12 \
               -alias "$ALIAS" \
               -keyalg RSA \
               -keysize 2048 \
