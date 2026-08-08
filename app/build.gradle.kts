@@ -31,95 +31,85 @@ android {
 
   signingConfigs {
     create("release") {
+      enableV1Signing = true
+      enableV2Signing = true
+
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/release.keystore"
       val keystoreFile = file(keystorePath)
 
       val envPass = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
       val envAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: "releaseKey"
-      val envKeyPass = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
+      val envKeyPass = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: envPass
 
-      var validFile: File? = null
-      var validStorePass = envPass
-      var validAlias = envAlias
-      var validKeyPass = envKeyPass
-
-      fun checkKeystore(f: File, storePass: String, alias: String, keyPass: String): Triple<Boolean, String, String>? {
+      fun tryLoadKeystore(f: File, pass: String): KeyStore? {
         if (!f.exists() || f.length() == 0L) return null
         for (type in arrayOf("PKCS12", "JKS", KeyStore.getDefaultType())) {
           try {
             val ks = KeyStore.getInstance(type)
-            f.inputStream().use { ks.load(it, storePass.toCharArray()) }
-            if (ks.containsAlias(alias)) {
-              if (ks.getCertificate(alias) != null) {
-                var effectiveKeyPass = keyPass
-                try {
-                  if (ks.getKey(alias, keyPass.toCharArray()) != null) {
-                    return Triple(true, alias, effectiveKeyPass)
-                  }
-                } catch (_: Throwable) {}
-                try {
-                  if (ks.getKey(alias, storePass.toCharArray()) != null) {
-                    effectiveKeyPass = storePass
-                    return Triple(true, alias, effectiveKeyPass)
-                  }
-                } catch (_: Throwable) {}
-              }
-            }
+            f.inputStream().use { ks.load(it, pass.toCharArray()) }
+            return ks
           } catch (_: Throwable) {}
         }
         return null
       }
 
-      val exactMatch = checkKeystore(keystoreFile, envPass, envAlias, envKeyPass)
-      if (exactMatch != null) {
-        validFile = keystoreFile
-        validAlias = exactMatch.second
-        validKeyPass = exactMatch.third
-      } else {
-        if (keystoreFile.exists() && keystoreFile.length() > 0L) {
-          for (type in arrayOf("PKCS12", "JKS", KeyStore.getDefaultType())) {
-            try {
-              val ks = KeyStore.getInstance(type)
-              keystoreFile.inputStream().use { ks.load(it, envPass.toCharArray()) }
-              val aliases = ks.aliases()
-              while (aliases.hasMoreElements()) {
-                val a = aliases.nextElement()
-                val match = checkKeystore(keystoreFile, envPass, a, envKeyPass)
-                if (match != null) {
-                  validFile = keystoreFile
-                  validAlias = match.second
-                  validKeyPass = match.third
-                  break
-                }
-              }
-              if (validFile != null) break
-            } catch (_: Throwable) {}
-          }
-        }
+      var chosenFile = keystoreFile
+      var chosenPass = envPass
+      var chosenAlias = envAlias
+      var chosenKeyPass = envKeyPass
 
-        if (validFile == null) {
-          val debugKs = file("${rootDir}/debug.keystore")
-          val debugMatch = checkKeystore(debugKs, "android", "androiddebugkey", "android")
-          if (debugMatch != null) {
-            validFile = debugKs
-            validStorePass = "android"
-            validAlias = "androiddebugkey"
-            validKeyPass = "android"
-          }
+      var ks = tryLoadKeystore(keystoreFile, envPass)
+      if (ks == null && envPass != "android") {
+        ks = tryLoadKeystore(keystoreFile, "android")
+        if (ks != null) chosenPass = "android"
+      }
+
+      if (ks == null) {
+        val debugFile = file("${rootDir}/debug.keystore")
+        ks = tryLoadKeystore(debugFile, "android")
+        if (ks != null) {
+          chosenFile = debugFile
+          chosenPass = "android"
+          chosenAlias = "androiddebugkey"
+          chosenKeyPass = "android"
         }
       }
 
-      if (validFile != null) {
-        storeFile = validFile
-        storePassword = validStorePass
-        keyAlias = validAlias
-        keyPassword = validKeyPass
+      if (ks != null) {
+        if (!ks.containsAlias(chosenAlias)) {
+          val aliases = ks.aliases()
+          if (aliases.hasMoreElements()) {
+            chosenAlias = aliases.nextElement()
+          }
+        }
       } else {
-        storeFile = file("${rootDir}/debug.keystore")
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
+        // Generate a fresh release keystore if none is found or loadable
+        val targetFile = file("${rootDir}/release.keystore")
+        try {
+          val builder = ProcessBuilder(
+            "keytool", "-genkeypair", "-v",
+            "-keystore", targetFile.absolutePath,
+            "-storetype", "PKCS12",
+            "-alias", envAlias,
+            "-keyalg", "RSA",
+            "-keysize", "2048",
+            "-validity", "10000",
+            "-storepass", envPass,
+            "-keypass", envPass,
+            "-dname", "CN=InstagramDownloader, OU=Dev, O=App, L=City, ST=State, C=US"
+          )
+          builder.inheritIO().start().waitFor()
+        } catch (_: Throwable) {}
+        chosenFile = targetFile
+        chosenPass = envPass
+        chosenAlias = envAlias
+        chosenKeyPass = envPass
       }
+
+      storeFile = chosenFile
+      storePassword = chosenPass
+      keyAlias = chosenAlias
+      keyPassword = chosenKeyPass
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")

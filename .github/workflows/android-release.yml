@@ -62,7 +62,7 @@ jobs:
         run: |
           ALIAS="${KEY_ALIAS:-releaseKey}"
           PASS="${STORE_PASSWORD:-android}"
-          KEYPASS="${KEY_PASSWORD:-android}"
+          KEYPASS="${KEY_PASSWORD:-$PASS}"
 
           KEY_SECRET="${RELEASE_KEY_BASE64:-$SIGNING_KEY}"
 
@@ -88,12 +88,13 @@ jobs:
               -keysize 2048 \
               -validity 10000 \
               -storepass "$PASS" \
-              -keypass "$PASS" \
+              -keypass "$KEYPASS" \
               -dname "CN=InstagramDownloader, OU=Dev, O=App, L=City, ST=State, C=US"
           fi
 
           cp release.keystore my-release-key.jks 2>/dev/null || true
-        # بازسازی فایل کلید ریلیز از فایل متنی base64 یا از سکرتهای گیتهاب برای ساین کردن موفقیت‌آمیز برنامه
+          cp release.keystore debug.keystore 2>/dev/null || true
+        # بازسازی یا تولید کلید ساین برنامه‌ها به همراه بک‌آپ برای تضمین اجرا روی تمام دستگاه‌ها
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
