@@ -259,16 +259,20 @@ class AdManager(private val context: Context) {
     }
 
     private fun preCacheImages(ads: List<AdItem>) {
-        val imageLoader = ImageLoader(context)
-        for (ad in ads) {
-            if (ad.imageUrl.isNotBlank()) {
-                val request = ImageRequest.Builder(context)
-                    .data(ad.imageUrl)
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .build()
-                imageLoader.enqueue(request)
+        try {
+            val imageLoader = ImageLoader(context)
+            for (ad in ads) {
+                if (ad.imageUrl.isNotBlank()) {
+                    val request = ImageRequest.Builder(context)
+                        .data(ad.imageUrl)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .build()
+                    imageLoader.enqueue(request)
+                }
             }
+        } catch (e: Exception) {
+            Log.e("AdManager", "Pre-cache image error: ${e.message}")
         }
     }
 

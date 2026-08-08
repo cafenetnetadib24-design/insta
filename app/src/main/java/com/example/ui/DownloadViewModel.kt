@@ -3,6 +3,7 @@ package com.example.ui
 import android.app.Application
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AdItem
@@ -77,28 +78,32 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
 
     private fun startAdTimer() {
         viewModelScope.launch {
-            // Initial fetch & pre-cache images (online update or offline cache)
-            val ads = adManager.fetchAndCacheAds()
-            if (ads.isNotEmpty()) {
-                val banner = ads.random()
-                _uiState.update { it.copy(bannerAd = banner) }
+            try {
+                // Initial fetch & pre-cache images (online update or offline cache)
+                val ads = adManager.fetchAndCacheAds()
+                if (ads.isNotEmpty()) {
+                    val banner = ads.random()
+                    _uiState.update { it.copy(bannerAd = banner) }
 
-                // Show full-screen ad after short initial delay (1.5 seconds)
-                delay(1500)
-                val fullAd = ads.random()
-                _uiState.update { it.copy(activeAd = fullAd) }
-            }
-
-            // Recurring 4-minute (240 seconds) ad rotation schedule
-            val fourMinutesMs = 4 * 60 * 1000L
-            while (isActive) {
-                delay(fourMinutesMs)
-                val currentAds = adManager.fetchAndCacheAds()
-                if (currentAds.isNotEmpty()) {
-                    val randomAd = currentAds.random()
-                    val randomBanner = currentAds.random()
-                    _uiState.update { it.copy(activeAd = randomAd, bannerAd = randomBanner) }
+                    // Show full-screen ad after short initial delay (1.5 seconds)
+                    delay(1500)
+                    val fullAd = ads.random()
+                    _uiState.update { it.copy(activeAd = fullAd) }
                 }
+
+                // Recurring 4-minute (240 seconds) ad rotation schedule
+                val fourMinutesMs = 4 * 60 * 1000L
+                while (isActive) {
+                    delay(fourMinutesMs)
+                    val currentAds = adManager.fetchAndCacheAds()
+                    if (currentAds.isNotEmpty()) {
+                        val randomAd = currentAds.random()
+                        val randomBanner = currentAds.random()
+                        _uiState.update { it.copy(activeAd = randomAd, bannerAd = randomBanner) }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("DownloadViewModel", "Error in startAdTimer: ${e.message}")
             }
         }
     }

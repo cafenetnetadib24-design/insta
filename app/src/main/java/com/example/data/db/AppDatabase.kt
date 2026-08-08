@@ -20,7 +20,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "video_downloader_db"
-                ).fallbackToDestructiveMigration()
+                ).fallbackToDestructiveMigration(true)
                  .build()
                 INSTANCE = instance
                 instance

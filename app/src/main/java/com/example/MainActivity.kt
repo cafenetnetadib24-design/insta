@@ -18,7 +18,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        handleIncomingIntent(intent)
+        try {
+            handleIncomingIntent(intent)
+        } catch (e: Exception) {
+            // Log intent error safely
+        }
 
         setContent {
             VideoDownloaderTheme {
@@ -30,19 +34,27 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIncomingIntent(intent)
+        try {
+            handleIncomingIntent(intent)
+        } catch (e: Exception) {
+            // Log intent error safely
+        }
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
-        val action = intent.action
-        val type = intent.type
+        try {
+            val action = intent.action
+            val type = intent.type
 
-        if (Intent.ACTION_SEND == action && type != null && type.startsWith("text/")) {
-            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-            if (!sharedText.isNullOrBlank()) {
-                downloadViewModel.handleSharedUrl(sharedText)
+            if (Intent.ACTION_SEND == action && type != null && type.startsWith("text/")) {
+                val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                if (!sharedText.isNullOrBlank()) {
+                    downloadViewModel.handleSharedUrl(sharedText)
+                }
             }
+        } catch (e: Exception) {
+            // Ignore intent handling exceptions
         }
     }
 }
