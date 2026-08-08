@@ -91,17 +91,7 @@ jobs:
           }
 
           if [ -n "$SIGNING_KEY" ]; then
-            python3 -c "
-import base64, os, sys, re
-sk = os.environ.get('SIGNING_KEY', '')
-cleaned = re.sub(r'-----[^-]+-----|\s+', '', sk)
-try:
-    decoded = base64.b64decode(cleaned)
-    with open('release.keystore', 'wb') as f:
-        f.write(decoded)
-except Exception:
-    sys.exit(1)
-" 2>/dev/null || true
+            python3 -c "import base64, os, sys, re; sk = os.environ.get('SIGNING_KEY', ''); cleaned = re.sub(r'-----[^-]+-----|\s+', '', sk); open('release.keystore', 'wb').write(base64.b64decode(cleaned))" 2>/dev/null || true
 
             if verify_and_extract_keystore release.keystore; then
               echo "Custom SIGNING_KEY secret decoded and validated successfully."
