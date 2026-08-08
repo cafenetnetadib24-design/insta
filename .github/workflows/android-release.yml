@@ -58,38 +58,58 @@ jobs:
             local kfile="$1"
             [ -s "$kfile" ] || return 1
 
-            if ! keytool -list -keystore "$kfile" -storepass "$PASS" >/dev/null 2>&1; then
-              return 1
+            local store_pass="$PASS"
+            if ! keytool -list -keystore "$kfile" -storepass "$store_pass" >/dev/null 2>&1; then
+              store_pass="android"
+              if ! keytool -list -keystore "$kfile" -storepass "$store_pass" >/dev/null 2>&1; then
+                return 1
+              fi
             fi
 
             local found_alias=""
-            if keytool -exportcert -keystore "$kfile" -storepass "$PASS" -alias "$ALIAS" -keypass "$KEYPASS" >/dev/null 2>&1 || \
-               keytool -exportcert -keystore "$kfile" -storepass "$PASS" -alias "$ALIAS" -keypass "$PASS" >/dev/null 2>&1; then
+            if keytool -list -keystore "$kfile" -storepass "$store_pass" -alias "$ALIAS" >/dev/null 2>&1; then
               found_alias="$ALIAS"
             else
-              found_alias=$(keytool -list -v -keystore "$kfile" -storepass "$PASS" 2>/dev/null | grep -i "Alias name:" | head -n 1 | cut -d':' -f2 | xargs)
+              found_alias=$(keytool -list -v -keystore "$kfile" -storepass "$store_pass" 2>/dev/null | grep -i "Alias name:" | head -n 1 | cut -d':' -f2 | xargs)
             fi
 
-            if [ -n "$found_alias" ]; then
-              ALIAS="$found_alias"
-              echo "KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
-              return 0
+            [ -n "$found_alias" ] || return 1
+
+            local key_pass="$KEYPASS"
+            if keytool -certreq -keystore "$kfile" -storepass "$store_pass" -alias "$found_alias" -keypass "$key_pass" >/dev/null 2>&1; then
+              :
+            elif keytool -certreq -keystore "$kfile" -storepass "$store_pass" -alias "$found_alias" -keypass "$store_pass" >/dev/null 2>&1; then
+              key_pass="$store_pass"
+            else
+              key_pass="$store_pass"
             fi
-            return 1
+
+            echo "STORE_PASSWORD=$store_pass" >> $GITHUB_ENV
+            echo "KEY_ALIAS=$found_alias" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=$key_pass" >> $GITHUB_ENV
+            return 0
           }
 
           if [ -n "$SIGNING_KEY" ]; then
-            CLEAN_KEY=$(echo "$SIGNING_KEY" | tr -d ' \n\r\t')
-            echo "$CLEAN_KEY" | base64 --decode > release.keystore 2>/dev/null || \
-            echo "$CLEAN_KEY" | base64 -d > release.keystore 2>/dev/null || true
+            python3 -c "
+import base64, os, sys, re
+sk = os.environ.get('SIGNING_KEY', '')
+cleaned = re.sub(r'-----[^-]+-----|\s+', '', sk)
+try:
+    decoded = base64.b64decode(cleaned)
+    with open('release.keystore', 'wb') as f:
+        f.write(decoded)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null || true
 
             if verify_and_extract_keystore release.keystore; then
-              echo "Custom SIGNING_KEY secret decoded and validated successfully with alias '$ALIAS'."
+              echo "Custom SIGNING_KEY secret decoded and validated successfully."
             else
               echo "SIGNING_KEY base64 decode or validation failed. Trying raw secret..."
               printf '%s' "$SIGNING_KEY" > release.keystore
               if verify_and_extract_keystore release.keystore; then
-                echo "Custom SIGNING_KEY secret validated successfully as raw file with alias '$ALIAS'."
+                echo "Custom SIGNING_KEY secret validated successfully as raw file."
               else
                 echo "SIGNING_KEY secret is invalid or corrupted. Removing invalid file..."
                 rm -f release.keystore
@@ -110,6 +130,9 @@ jobs:
               -storepass "$PASS" \
               -keypass "$PASS" \
               -dname "CN=InstagramDownloader, OU=Dev, O=App, L=City, ST=State, C=US"
+            echo "STORE_PASSWORD=$PASS" >> $GITHUB_ENV
+            echo "KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=$PASS" >> $GITHUB_ENV
             echo "Release keystore ready."
           fi
 
@@ -137,9 +160,9 @@ jobs:
       - name: Build Release APK and AAB
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ env.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
         run: |
           ./gradlew clean assembleRelease bundleRelease \
             --no-daemon \
