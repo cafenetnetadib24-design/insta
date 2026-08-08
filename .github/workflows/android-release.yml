@@ -1,4 +1,4 @@
-name: Build Release (APK & AAB)
+name: Android Release Build
 
 on:
   push:
@@ -11,74 +11,94 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab (امکان اجرای دستی از بخش Actions در گیتهاب)
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build Android Release Artifacts
+    name: Build Release APK & AAB
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        # این مرحله کدهای پروژه را از گیتهاب واکشی میکند
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'zulu'
           java-version: '21'
-        # تنظیم نسخه ۲۱ جاوا که با تنظیمات اندروید این پروژه کاملا سازگار است
 
-      - name: Create .env and Configuration
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+
+      - name: Ensure Valid Gradle Wrapper Jar
         run: |
-          if [ -f .env.example ]; then
-            cp .env.example .env
-          else
-            touch .env
-          fi
-          if [ -n "$GEMINI_API_KEY" ]; then
-            echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
+          if ! jar tf gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
+            echo "Gradle wrapper JAR is corrupted or missing. Repairing with system gradle..."
+            gradle wrapper --gradle-version 9.3.1
           fi
 
-          mkdir -p app
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          elif [ ! -f "app/google-services.json" ]; then
-            echo '{"project_info":{"project_number":"123456789012","project_id":"sample-project","storage_bucket":"sample-project.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789012:android:1234567890123456","android_client_info":{"package_name":"com.codebaz.videodownloader.mkvpzx"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKeyForGoogleServicesBuild"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
-          fi
-        # ایجاد فایل .env و google-services.json برای جلوگیری از خطای سکرت و سرویس‌های گوگل
-
-      - name: Decode Release Keystore
+      - name: Prepare Release Keystore and Environment
         env:
-          RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           ALIAS="${KEY_ALIAS:-releaseKey}"
           PASS="${STORE_PASSWORD:-android}"
-          KEYPASS="${KEY_PASSWORD:-$PASS}"
+          KEYPASS="${KEY_PASSWORD:-android}"
 
-          KEY_SECRET="${RELEASE_KEY_BASE64:-$SIGNING_KEY}"
+          verify_and_extract_keystore() {
+            local kfile="$1"
+            [ -s "$kfile" ] || return 1
 
-          if [ -f my-release-key.base64 ]; then
-            base64 -d my-release-key.base64 > release.keystore 2>/dev/null || true
-            echo "Keystore decoded successfully from base64 file."
-          elif [ -n "$KEY_SECRET" ]; then
-            CLEAN_KEY=$(echo "$KEY_SECRET" | tr -d ' \n\r\t')
+            if ! keytool -list -keystore "$kfile" -storepass "$PASS" >/dev/null 2>&1; then
+              return 1
+            fi
+
+            local found_alias=""
+            if keytool -exportcert -keystore "$kfile" -storepass "$PASS" -alias "$ALIAS" -keypass "$KEYPASS" >/dev/null 2>&1 || \
+               keytool -exportcert -keystore "$kfile" -storepass "$PASS" -alias "$ALIAS" -keypass "$PASS" >/dev/null 2>&1; then
+              found_alias="$ALIAS"
+            else
+              found_alias=$(keytool -list -v -keystore "$kfile" -storepass "$PASS" 2>/dev/null | grep -i "Alias name:" | head -n 1 | cut -d':' -f2 | xargs)
+            fi
+
+            if [ -n "$found_alias" ]; then
+              ALIAS="$found_alias"
+              echo "KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+              return 0
+            fi
+            return 1
+          }
+
+          if [ -n "$SIGNING_KEY" ]; then
+            CLEAN_KEY=$(echo "$SIGNING_KEY" | tr -d ' \n\r\t')
             echo "$CLEAN_KEY" | base64 --decode > release.keystore 2>/dev/null || \
-            echo "$CLEAN_KEY" | base64 -d > release.keystore 2>/dev/null || \
-            printf '%s' "$KEY_SECRET" > release.keystore
-            echo "Keystore decoded successfully from GitHub Secrets."
+            echo "$CLEAN_KEY" | base64 -d > release.keystore 2>/dev/null || true
+
+            if verify_and_extract_keystore release.keystore; then
+              echo "Custom SIGNING_KEY secret decoded and validated successfully with alias '$ALIAS'."
+            else
+              echo "SIGNING_KEY base64 decode or validation failed. Trying raw secret..."
+              printf '%s' "$SIGNING_KEY" > release.keystore
+              if verify_and_extract_keystore release.keystore; then
+                echo "Custom SIGNING_KEY secret validated successfully as raw file with alias '$ALIAS'."
+              else
+                echo "SIGNING_KEY secret is invalid or corrupted. Removing invalid file..."
+                rm -f release.keystore
+              fi
+            fi
           fi
 
-          if [ ! -s release.keystore ] || ! keytool -list -keystore release.keystore -storepass "$PASS" >/dev/null 2>&1; then
-            echo "No valid custom keystore found. Generating a valid release keystore..."
+          if [ ! -f "release.keystore" ] || [ ! -s "release.keystore" ]; then
+            echo "Generating valid release keystore with alias=$ALIAS..."
             rm -f release.keystore
             keytool -genkeypair -v \
               -keystore release.keystore \
@@ -88,38 +108,31 @@ jobs:
               -keysize 2048 \
               -validity 10000 \
               -storepass "$PASS" \
-              -keypass "$KEYPASS" \
+              -keypass "$PASS" \
               -dname "CN=InstagramDownloader, OU=Dev, O=App, L=City, ST=State, C=US"
+            echo "Release keystore ready."
           fi
 
-          cp release.keystore my-release-key.jks 2>/dev/null || true
-          cp release.keystore debug.keystore 2>/dev/null || true
-        # بازسازی یا تولید کلید ساین برنامه‌ها به همراه بک‌آپ برای تضمین اجرا روی تمام دستگاه‌ها
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          validate-wrappers: false
-        # این اکشن رسمی گریدل است که کش فایلها و متعلقات بیلد را مدیریت میکند تا سرعت بیلد بالا رود. بررسی صحت رپر به علت تفاوت در محیط بیلد غیرفعال شده است.
-
-      - name: Fix Corrupt Gradle Wrapper
-        run: |
-          if ! jar tf gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
-            if command -v gradle >/dev/null 2>&1; then
-              echo "Using pre-installed Gradle to regenerate wrapper..."
-              rm -f gradle/wrapper/gradle-wrapper.jar
-              gradle wrapper --gradle-version 9.3.1
-            else
-              echo "Gradle not found. Downloading wrapper JAR using curl..."
-              rm -f gradle/wrapper/gradle-wrapper.jar
-              curl -sSLo gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar
-            fi
+          mkdir -p app
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            echo "Custom google-services.json provided via secrets."
           fi
-        # برطرف کردن خودکار خطای رپر گریدل خراب یا نامعتبر با بازسازی/دانلود مجدد آن در محیط رانر
 
-      - name: Grant Execute Permission to Gradlew
-        run: chmod +x gradlew
-        # اعطای دسترسی اجرایی به اسکریپت گریدل
+          if [ ! -f "app/google-services.json" ]; then
+            echo "Generating default app/google-services.json..."
+            echo '{"project_info":{"project_number":"123456789012","project_id":"sample-project","storage_bucket":"sample-project.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789012:android:1234567890123456","android_client_info":{"package_name":"com.aistudio.videodownloader.mkvpzx"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKeyForGoogleServicesBuild"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
+          fi
+
+          if [ -f ".env.example" ]; then
+            cp -n .env.example .env || true
+          else
+            touch .env
+          fi
+
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
+          fi
 
       - name: Build Release APK and AAB
         env:
@@ -128,33 +141,32 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease bundleRelease \
+          ./gradlew clean assembleRelease bundleRelease \
             --no-daemon \
             -Dorg.gradle.workers.max=2 \
-            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
-        # اجرای بیلد نسخه نهایی APK و AAB به همراه ساین و امضا با ریلیز کی موجود در پروژه
+            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" \
+            --stacktrace
 
-      - name: Upload Release APK
+      - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: App-Release-APK
-          path: app/build/outputs/apk/release/*.apk
-        # آپلود فایل خروجی APK به عنوان آرتیفکت گیتهاب جهت دانلود راحت شما
+          name: Android-Release-APK
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
 
-      - name: Upload Release AAB (App Bundle)
+      - name: Upload Release AAB Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: App-Release-AAB
-          path: app/build/outputs/bundle/release/*.aab
-        # آپلود فایل خروجی AAB جهت انتشار در گوگل‌پلی
+          name: Android-Release-AAB
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/bundle/release/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

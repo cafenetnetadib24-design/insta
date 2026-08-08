@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "دانلودگر اینستاگرام"
+rootProject.name = "Video Downloader"
 
 include(":app")

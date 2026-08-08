@@ -15,7 +15,5 @@ data class DownloadEntity(
     val fileSizeBytes: Long,
     val durationFormatted: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val downloadStatus: String = "COMPLETED",
-    val isFavorite: Boolean = false,
-    val folderId: Long? = null
+    val downloadStatus: String = "COMPLETED"
 )

@@ -1,8 +1,6 @@
 package com.example.downloader
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.util.Log
 import coil.ImageLoader
 import coil.request.CachePolicy
@@ -19,113 +17,34 @@ import java.util.concurrent.TimeUnit
 class AdManager(private val context: Context) {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
         .build()
-
-    private val prefs = context.getSharedPreferences("ad_manager_cache_prefs", Context.MODE_PRIVATE)
-    private val keySavedAdsJson = "saved_ads_json"
 
     private val adsUrl = "https://raw.githubusercontent.com/cafenetnetadib24-design/ads/refs/heads/main/ads.html"
     private var cachedAdsList: List<AdItem> = emptyList()
 
-    init {
-        // Load offline cached ads on initialization
-        cachedAdsList = loadAdsFromPrefs()
-    }
-
     suspend fun fetchAndCacheAds(): List<AdItem> = withContext(Dispatchers.IO) {
-        if (isNetworkAvailable()) {
-            try {
-                val request = Request.Builder()
-                    .url(adsUrl)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Android; Mobile)")
-                    .build()
-
-                val response = client.newCall(request).execute()
-                val htmlContent = response.body?.string() ?: ""
-
-                val parsedAds = parseAdsFromHtml(htmlContent)
-                if (parsedAds.isNotEmpty()) {
-                    cachedAdsList = parsedAds
-                    saveAdsToPrefs(parsedAds)
-                    preCacheImages(parsedAds)
-                    Log.d("AdManager", "Successfully updated & cached online ${parsedAds.size} ads")
-                    return@withContext cachedAdsList
-                }
-            } catch (e: Exception) {
-                Log.e("AdManager", "Error fetching online ads, falling back to cached ads: ${e.message}")
-            }
-        } else {
-            Log.d("AdManager", "No active internet connection. Utilizing cached ad content.")
-        }
-
-        // Fallback to local disk cache if network request failed or offline
-        if (cachedAdsList.isEmpty()) {
-            cachedAdsList = loadAdsFromPrefs()
-        }
-        
-        // Also ensure cached images are requested with disk cache enabled
-        if (cachedAdsList.isNotEmpty()) {
-            preCacheImages(cachedAdsList)
-        }
-        
-        return@withContext cachedAdsList
-    }
-
-    private fun isNetworkAvailable(): Boolean {
-        return try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            if (cm != null) {
-                val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
-                capabilities != null && (
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                )
-            } else false
-        } catch (e: Exception) {
-            true // Attempt network fetch if check fails
-        }
-    }
-
-    private fun saveAdsToPrefs(ads: List<AdItem>) {
         try {
-            val array = JSONArray()
-            for (ad in ads) {
-                val obj = JSONObject().apply {
-                    put("id", ad.id)
-                    put("imageUrl", ad.imageUrl)
-                    put("targetUrl", ad.targetUrl)
-                    put("title", ad.title)
-                }
-                array.put(obj)
-            }
-            prefs.edit().putString(keySavedAdsJson, array.toString()).apply()
-        } catch (e: Exception) {
-            Log.e("AdManager", "Error saving ads to prefs: ${e.message}")
-        }
-    }
+            val request = Request.Builder()
+                .url(adsUrl)
+                .addHeader("User-Agent", "Mozilla/5.0 (Android; Mobile)")
+                .build()
 
-    private fun loadAdsFromPrefs(): List<AdItem> {
-        val list = mutableListOf<AdItem>()
-        val savedJson = prefs.getString(keySavedAdsJson, null) ?: return emptyList()
-        try {
-            val array = JSONArray(savedJson)
-            for (i in 0 until array.length()) {
-                val obj = array.optJSONObject(i) ?: continue
-                val id = obj.optString("id", "cached_$i")
-                val img = obj.optString("imageUrl", "")
-                val target = obj.optString("targetUrl", "")
-                val title = obj.optString("title", "پیشنهاد ویژه")
-                if (img.isNotBlank()) {
-                    list.add(AdItem(id = id, imageUrl = img, targetUrl = target, title = title))
-                }
+            val response = client.newCall(request).execute()
+            val htmlContent = response.body?.string() ?: ""
+
+            val parsedAds = parseAdsFromHtml(htmlContent)
+            if (parsedAds.isNotEmpty()) {
+                cachedAdsList = parsedAds
+                preCacheImages(parsedAds)
+                Log.d("AdManager", "Successfully fetched ${parsedAds.size} ads")
             }
+            return@withContext cachedAdsList
         } catch (e: Exception) {
-            Log.e("AdManager", "Error reading ads from prefs: ${e.message}")
+            Log.e("AdManager", "Error fetching ads: ${e.message}", e)
+            return@withContext cachedAdsList
         }
-        return list
     }
 
     private fun parseAdsFromHtml(html: String): List<AdItem> {
@@ -259,20 +178,16 @@ class AdManager(private val context: Context) {
     }
 
     private fun preCacheImages(ads: List<AdItem>) {
-        try {
-            val imageLoader = ImageLoader(context)
-            for (ad in ads) {
-                if (ad.imageUrl.isNotBlank()) {
-                    val request = ImageRequest.Builder(context)
-                        .data(ad.imageUrl)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .build()
-                    imageLoader.enqueue(request)
-                }
+        val imageLoader = ImageLoader(context)
+        for (ad in ads) {
+            if (ad.imageUrl.isNotBlank()) {
+                val request = ImageRequest.Builder(context)
+                    .data(ad.imageUrl)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .build()
+                imageLoader.enqueue(request)
             }
-        } catch (e: Exception) {
-            Log.e("AdManager", "Pre-cache image error: ${e.message}")
         }
     }
 

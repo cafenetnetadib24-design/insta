@@ -3,14 +3,11 @@ package com.example.ui
 import android.app.Application
 import android.content.ClipboardManager
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AdItem
 import com.example.data.db.AppDatabase
 import com.example.data.db.DownloadEntity
-import com.example.data.db.FolderEntity
-import com.example.data.db.FolderDao
 import com.example.downloader.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,14 +27,11 @@ data class DownloadUiState(
     val extractedVideoInfo: VideoInfo? = null,
     val customTitle: String = "",
     val downloadProgress: DownloadProgress = DownloadProgress(),
-    val selectedTab: Int = 0, // 0 = Downloader, 1 = History/Gallery
+    val selectedTab: Int = 0, // 0 = Downloader, 1 = History
     val activePreviewUri: String? = null,
     val isDarkTheme: Boolean = false,
     val galleryLayoutMode: Int = 1, // 0 = List, 1 = Grid (2 cols)
     val gallerySearchQuery: String = "",
-    val galleryFilterTab: Int = 0, // 0 = All, 1 = Favorites, 2 = Folders
-    val selectedFolderId: Long? = null, // null when not inside a specific folder
-    val showTutorialDialog: Boolean = false,
     val activeAd: AdItem? = null,
     val bannerAd: AdItem? = null
 )
@@ -46,64 +40,37 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
 
     private val db = AppDatabase.getDatabase(application)
     private val downloadDao = db.downloadDao()
-    private val folderDao = db.folderDao()
     private val extractor = InstagramExtractor()
     private val downloadManagerHelper = DownloadManagerHelper(application)
     private val adManager = AdManager(application)
-    private val prefs = application.getSharedPreferences("app_settings_prefs", Context.MODE_PRIVATE)
-
-    private val _uiState = MutableStateFlow(DownloadUiState())
-    val uiState: StateFlow<DownloadUiState> = _uiState.asStateFlow()
 
     init {
-        checkFirstLaunchTutorial()
         startAdTimer()
-    }
-
-    private fun checkFirstLaunchTutorial() {
-        val hasSeenTutorial = prefs.getBoolean("has_seen_tutorial", false)
-        if (!hasSeenTutorial) {
-            _uiState.update { it.copy(showTutorialDialog = true) }
-            prefs.edit().putBoolean("has_seen_tutorial", true).apply()
-        }
-    }
-
-    fun openTutorial() {
-        _uiState.update { it.copy(showTutorialDialog = true) }
-    }
-
-    fun dismissTutorial() {
-        _uiState.update { it.copy(showTutorialDialog = false) }
     }
 
     private fun startAdTimer() {
         viewModelScope.launch {
-            try {
-                // Initial fetch & pre-cache images (online update or offline cache)
-                val ads = adManager.fetchAndCacheAds()
-                if (ads.isNotEmpty()) {
-                    val banner = ads.random()
-                    _uiState.update { it.copy(bannerAd = banner) }
+            // Initial fetch & pre-cache images
+            val ads = adManager.fetchAndCacheAds()
+            if (ads.isNotEmpty()) {
+                val banner = ads.random()
+                _uiState.update { it.copy(bannerAd = banner) }
 
-                    // Show full-screen ad after short initial delay (1.5 seconds)
-                    delay(1500)
-                    val fullAd = ads.random()
-                    _uiState.update { it.copy(activeAd = fullAd) }
-                }
+                // Show full-screen ad after short initial delay (1.5 seconds)
+                delay(1500)
+                val fullAd = ads.random()
+                _uiState.update { it.copy(activeAd = fullAd) }
+            }
 
-                // Recurring 4-minute (240 seconds) ad rotation schedule
-                val fourMinutesMs = 4 * 60 * 1000L
-                while (isActive) {
-                    delay(fourMinutesMs)
-                    val currentAds = adManager.fetchAndCacheAds()
-                    if (currentAds.isNotEmpty()) {
-                        val randomAd = currentAds.random()
-                        val randomBanner = currentAds.random()
-                        _uiState.update { it.copy(activeAd = randomAd, bannerAd = randomBanner) }
-                    }
+            // Recurring 90-second ad rotation schedule
+            while (isActive) {
+                delay(90 * 1000L)
+                val currentAds = adManager.fetchAndCacheAds()
+                if (currentAds.isNotEmpty()) {
+                    val randomAd = currentAds.random()
+                    val randomBanner = currentAds.random()
+                    _uiState.update { it.copy(activeAd = randomAd, bannerAd = randomBanner) }
                 }
-            } catch (e: Exception) {
-                Log.e("DownloadViewModel", "Error in startAdTimer: ${e.message}")
             }
         }
     }
@@ -126,14 +93,10 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(activeAd = null) }
     }
 
-    val historyList: StateFlow<List<DownloadEntity>> = downloadDao.getAllDownloads()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    private val _uiState = MutableStateFlow(DownloadUiState())
+    val uiState: StateFlow<DownloadUiState> = _uiState.asStateFlow()
 
-    val foldersList: StateFlow<List<FolderEntity>> = folderDao.getAllFolders()
+    val historyList: StateFlow<List<DownloadEntity>> = downloadDao.getAllDownloads()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -340,51 +303,6 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                 downloadStatus = "COMPLETED"
             )
             downloadDao.insertDownload(entity)
-        }
-    }
-
-    fun setGalleryFilterTab(tab: Int) {
-        _uiState.update { it.copy(galleryFilterTab = tab, selectedFolderId = null) }
-    }
-
-    fun setSelectedFolderId(folderId: Long?) {
-        _uiState.update { it.copy(selectedFolderId = folderId) }
-    }
-
-    fun toggleFavorite(id: Long, currentStatus: Boolean) {
-        viewModelScope.launch {
-            downloadDao.updateFavoriteStatus(id, !currentStatus)
-        }
-    }
-
-    fun moveFileToFolder(downloadId: Long, folderId: Long?) {
-        viewModelScope.launch {
-            downloadDao.updateFolderId(downloadId, folderId)
-        }
-    }
-
-    fun createFolder(name: String, onFolderCreated: ((Long) -> Unit)? = null) {
-        if (name.isBlank()) return
-        viewModelScope.launch {
-            val newId = folderDao.insertFolder(FolderEntity(name = name.trim()))
-            onFolderCreated?.invoke(newId)
-        }
-    }
-
-    fun renameFolder(id: Long, newName: String) {
-        if (newName.isBlank()) return
-        viewModelScope.launch {
-            folderDao.updateFolderName(id, newName.trim())
-        }
-    }
-
-    fun deleteFolder(id: Long) {
-        viewModelScope.launch {
-            downloadDao.clearFolderIdFromDownloads(id)
-            folderDao.deleteFolderById(id)
-            if (_uiState.value.selectedFolderId == id) {
-                _uiState.update { it.copy(selectedFolderId = null) }
-            }
         }
     }
 

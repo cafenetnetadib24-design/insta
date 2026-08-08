@@ -140,14 +140,7 @@ fun VideoPreviewDialog(
                     AndroidView(
                         factory = { ctx ->
                             VideoView(ctx).apply {
-                                try {
-                                    setVideoURI(uri)
-                                } catch (e: Exception) {
-                                    // Ignore URI errors
-                                }
-                                setOnErrorListener { _, _, _ ->
-                                    true // Handled error gracefully without system error dialog or crash
-                                }
+                                setVideoURI(uri)
                                 setOnPreparedListener { mp ->
                                     mediaPlayer = mp
                                     mp.isLooping = true
@@ -158,11 +151,7 @@ fun VideoPreviewDialog(
                                     }
                                     mp.start()
                                     isPlaying = true
-                                    try {
-                                        durationMs = mp.duration.toLong()
-                                    } catch (e: Exception) {
-                                        // Ignore
-                                    }
+                                    durationMs = mp.duration.toLong()
                                 }
                             }
                         },
