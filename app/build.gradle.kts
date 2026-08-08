@@ -39,10 +39,47 @@ android {
       val envAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: "releaseKey"
       val envKeyPass = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
 
-      storeFile = keystoreFile
-      storePassword = envPass
-      keyAlias = envAlias
-      keyPassword = envKeyPass
+      fun checkKeystore(f: File, pass: String): Boolean {
+        if (!f.exists() || f.length() == 0L) return false
+        return try {
+          val ks = KeyStore.getInstance("PKCS12")
+          f.inputStream().use { ks.load(it, pass.toCharArray()) }
+          true
+        } catch (_: Exception) {
+          try {
+            val ks = KeyStore.getInstance(KeyStore.getDefaultType())
+            f.inputStream().use { ks.load(it, pass.toCharArray()) }
+            true
+          } catch (_: Exception) {
+            false
+          }
+        }
+      }
+
+      if (checkKeystore(keystoreFile, envPass)) {
+        storeFile = keystoreFile
+        storePassword = envPass
+        keyAlias = envAlias
+        keyPassword = envKeyPass
+      } else if (checkKeystore(keystoreFile, "android")) {
+        storeFile = keystoreFile
+        storePassword = "android"
+        keyAlias = envAlias
+        keyPassword = "android"
+      } else {
+        val debugKs = file("${rootDir}/debug.keystore")
+        if (debugKs.exists() && debugKs.length() > 0L) {
+          storeFile = debugKs
+          storePassword = "android"
+          keyAlias = "androiddebugkey"
+          keyPassword = "android"
+        } else {
+          storeFile = keystoreFile
+          storePassword = envPass
+          keyAlias = envAlias
+          keyPassword = envKeyPass
+        }
+      }
     }
     create("debugConfig") {
       val debugKs = file("${rootDir}/debug.keystore")

@@ -75,13 +75,13 @@ jobs:
 
             [ -n "$found_alias" ] || return 1
 
-            local key_pass="$KEYPASS"
-            if keytool -certreq -keystore "$kfile" -storepass "$store_pass" -alias "$found_alias" -keypass "$key_pass" >/dev/null 2>&1; then
-              :
+            local key_pass=""
+            if keytool -certreq -keystore "$kfile" -storepass "$store_pass" -alias "$found_alias" -keypass "$KEYPASS" >/dev/null 2>&1; then
+              key_pass="$KEYPASS"
             elif keytool -certreq -keystore "$kfile" -storepass "$store_pass" -alias "$found_alias" -keypass "$store_pass" >/dev/null 2>&1; then
               key_pass="$store_pass"
             else
-              key_pass="$store_pass"
+              return 1
             fi
 
             echo "STORE_PASSWORD=$store_pass" >> $GITHUB_ENV
@@ -91,7 +91,7 @@ jobs:
           }
 
           if [ -n "$SIGNING_KEY" ]; then
-            python3 -c "import base64, os, sys, re; sk = os.environ.get('SIGNING_KEY', ''); cleaned = re.sub(r'-----[^-]+-----|\s+', '', sk); open('release.keystore', 'wb').write(base64.b64decode(cleaned))" 2>/dev/null || true
+            python3 -c "import base64, os, sys, re; sk = os.environ.get('SIGNING_KEY', ''); cleaned = re.sub(r'-----[^-]+-----|\s+', '', sk); cleaned += '=' * ((4 - len(cleaned) % 4) % 4) if cleaned else ''; open('release.keystore', 'wb').write(base64.b64decode(cleaned))" 2>/dev/null || true
 
             if verify_and_extract_keystore release.keystore; then
               echo "Custom SIGNING_KEY secret decoded and validated successfully."
