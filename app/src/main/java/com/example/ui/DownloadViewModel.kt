@@ -45,45 +45,27 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
     private val adManager = AdManager(application)
 
     init {
-        startAdTimer()
+        preloadAds()
     }
 
-    private fun startAdTimer() {
+    private fun preloadAds() {
         viewModelScope.launch {
-            // Initial fetch & pre-cache images
-            val ads = adManager.fetchAndCacheAds()
-            if (ads.isNotEmpty()) {
-                val banner = ads.random()
-                _uiState.update { it.copy(bannerAd = banner) }
-
-                // Show full-screen ad after short initial delay (1.5 seconds)
-                delay(1500)
-                val fullAd = ads.random()
-                _uiState.update { it.copy(activeAd = fullAd) }
-            }
-
-            // Recurring 90-second ad rotation schedule
-            while (isActive) {
-                delay(90 * 1000L)
-                val currentAds = adManager.fetchAndCacheAds()
-                if (currentAds.isNotEmpty()) {
-                    val randomAd = currentAds.random()
-                    val randomBanner = currentAds.random()
-                    _uiState.update { it.copy(activeAd = randomAd, bannerAd = randomBanner) }
-                }
-            }
+            adManager.fetchAndCacheAds()
         }
     }
 
     fun triggerAdManually() {
         val randomAd = adManager.getRandomAd()
         if (randomAd != null) {
-            _uiState.update { it.copy(activeAd = randomAd) }
+            val banner = adManager.getRandomAd() ?: randomAd
+            _uiState.update { it.copy(activeAd = randomAd, bannerAd = banner) }
         } else {
             viewModelScope.launch {
                 val ads = adManager.fetchAndCacheAds()
                 if (ads.isNotEmpty()) {
-                    _uiState.update { it.copy(activeAd = ads.random(), bannerAd = ads.random()) }
+                    val full = ads.random()
+                    val banner = ads.random()
+                    _uiState.update { it.copy(activeAd = full, bannerAd = banner) }
                 }
             }
         }
@@ -180,6 +162,9 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        // Display ad when the user submits/sends the download request
+        triggerAdManually()
+
         _uiState.update {
             it.copy(
                 inputUrl = url,
@@ -226,6 +211,10 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
             ?: rawVideoInfo.title
         val videoInfo = rawVideoInfo.copy(title = finalTitle)
         val targetUrl = videoInfo.videoUrl
+
+        if (_uiState.value.activeAd == null) {
+            triggerAdManually()
+        }
 
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
