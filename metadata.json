@@ -1,5 +1,5 @@
 {
-  "name": "Video Downloader",
+  "name": "دانلودگر اینستاگرام",
   "description": "دانلود مستقیم ویدیو و ریلز اینستاگرام با پروسس‌بار پیشرفته و ذخیره خودکار در گالری",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

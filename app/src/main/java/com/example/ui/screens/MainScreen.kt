@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,6 +41,7 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val historyItems by viewModel.historyList.collectAsStateWithLifecycle()
+    val foldersList by viewModel.foldersList.collectAsStateWithLifecycle()
 
     val dynamicColorScheme = if (uiState.isDarkTheme) {
         darkColorScheme(
@@ -71,26 +75,23 @@ fun MainScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color(0xFFFF9800),
-                                shadowElevation = 6.dp
+                                shape = RoundedCornerShape(12.dp),
+                                shadowElevation = 4.dp
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FileDownload,
+                                Image(
+                                    painter = painterResource(id = com.example.R.drawable.app_logo),
                                     contentDescription = null,
-                                    tint = Color.White,
                                     modifier = Modifier
-                                        .padding(10.dp)
-                                        .size(22.dp)
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(12.dp))
                                 )
                             }
                             Column {
                                 Text(
-                                    text = "InstaFetch",
+                                    text = stringResource(id = com.example.R.string.app_name),
                                     color = MaterialTheme.colorScheme.onBackground,
-                                    fontSize = 19.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-0.5).sp
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     text = "دانلود مستقیم ریلز و ویدیوهای اینستاگرام",
@@ -104,18 +105,32 @@ fun MainScreen(
                         containerColor = MaterialTheme.colorScheme.background
                     ),
                     actions = {
-                        // Ad Trigger Button
-                        IconButton(
-                            onClick = { viewModel.triggerAdManually() },
+                        // App Tutorial Button
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFFFF9800).copy(alpha = 0.15f),
                             modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color(0xFFFF9800).copy(alpha = 0.15f))
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { viewModel.openTutorial() }
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Campaign,
-                                contentDescription = "تبلیغات ویژه",
-                                tint = Color(0xFFFF9800)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HelpOutline,
+                                    contentDescription = "آموزش برنامه",
+                                    tint = Color(0xFFFF9800),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "آموزش",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9800)
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         // Theme Switcher Button
@@ -229,11 +244,21 @@ fun MainScreen(
                         // History / Gallery Screen
                         HistoryList(
                             historyItems = historyItems,
+                            foldersList = foldersList,
                             searchQuery = uiState.gallerySearchQuery,
                             onSearchQueryChanged = { viewModel.onGallerySearchQueryChanged(it) },
                             layoutMode = uiState.galleryLayoutMode,
                             onLayoutModeChanged = { viewModel.setGalleryLayoutMode(it) },
+                            filterTab = uiState.galleryFilterTab,
+                            onFilterTabChanged = { viewModel.setGalleryFilterTab(it) },
+                            selectedFolderId = uiState.selectedFolderId,
+                            onFolderSelected = { viewModel.setSelectedFolderId(it) },
                             onPlayMedia = { viewModel.setPreviewUri(it) },
+                            onToggleFavorite = { id, status -> viewModel.toggleFavorite(id, status) },
+                            onMoveToFolder = { downloadId, folderId -> viewModel.moveFileToFolder(downloadId, folderId) },
+                            onCreateFolder = { name, onCreated -> viewModel.createFolder(name, onCreated) },
+                            onRenameFolder = { id, name -> viewModel.renameFolder(id, name) },
+                            onDeleteFolder = { id -> viewModel.deleteFolder(id) },
                             onRenameItem = { id, title -> viewModel.renameHistoryItem(id, title) },
                             onDeleteItem = { viewModel.deleteHistoryItem(it) }
                         )
@@ -255,6 +280,13 @@ fun MainScreen(
             com.example.ui.components.FullScreenAdDialog(
                 adItem = ad,
                 onDismiss = { viewModel.dismissAd() }
+            )
+        }
+
+        // Tutorial Guide Dialog
+        if (uiState.showTutorialDialog) {
+            TutorialDialog(
+                onDismiss = { viewModel.dismissTutorial() }
             )
         }
     }

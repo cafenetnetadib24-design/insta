@@ -15,7 +15,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.videodownloader.mkvpzx"
+    applicationId = "com.codebaz.videodownloader.mkvpzx"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
