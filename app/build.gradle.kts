@@ -32,7 +32,10 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/release.keystore"
+      val keystorePath = System.getenv("KEYSTORE_PATH") ?: run {
+        val jksFile = file("${rootDir}/my-release-key.jks")
+        if (jksFile.exists() && jksFile.length() > 0L) jksFile.absolutePath else "${rootDir}/release.keystore"
+      }
       val keystoreFile = file(keystorePath)
 
       val envPass = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
