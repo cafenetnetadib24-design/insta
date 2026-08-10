@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import com.example.downloader.DownloadState
 import com.example.ui.DownloadViewModel
 import com.example.ui.components.*
@@ -70,27 +72,35 @@ fun MainScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color(0xFFFF9800),
-                                shadowElevation = 6.dp
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        androidx.compose.ui.graphics.Brush.linearGradient(
+                                            colors = listOf(
+                                                Color(0xFF833AB4),
+                                                Color(0xFFFD1D1D),
+                                                Color(0xFFF77737)
+                                            )
+                                        )
+                                    )
+                                    .shadow(6.dp, RoundedCornerShape(14.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.FileDownload,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .padding(10.dp)
-                                        .size(22.dp)
+                                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                                    contentDescription = "آیکون برنامه",
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(42.dp)
                                 )
                             }
                             Column {
                                 Text(
-                                    text = "InstaFetch",
+                                    text = "دانلودگر اینستاگرام",
                                     color = MaterialTheme.colorScheme.onBackground,
-                                    fontSize = 19.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-0.5).sp
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
                                     text = "دانلود مستقیم ریلز و ویدیوهای اینستاگرام",

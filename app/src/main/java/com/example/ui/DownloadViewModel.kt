@@ -162,7 +162,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        // Display ad when the user submits/sends the download request
+        // Show interstitial ad ONCE when the user initiates video extraction
         triggerAdManually()
 
         _uiState.update {
@@ -212,9 +212,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         val videoInfo = rawVideoInfo.copy(title = finalTitle)
         val targetUrl = videoInfo.videoUrl
 
-        if (_uiState.value.activeAd == null) {
-            triggerAdManually()
-        }
+        // Removed redundant ad trigger here to prevent repeated ads during the same download flow
 
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
@@ -230,11 +228,9 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                             filePath = progress.savedFilePath ?: "",
                             fileSize = progress.totalBytes
                         )
-                        val completionAd = adManager.getRandomAd()
                         _uiState.update { 
                             it.copy(
-                                activePreviewUri = progress.savedContentUri,
-                                activeAd = completionAd ?: it.activeAd
+                                activePreviewUri = progress.savedContentUri
                             ) 
                         }
                     }
